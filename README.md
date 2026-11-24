@@ -49,7 +49,7 @@ Optional in der Gerätedatei unter `substitutions`:
 | `timezone` | `Europe/Berlin` | Zeitzone der Uhr |
 | `track_cm` | `180` | Spurbreite in cm |
 | `wheelbase_cm` | `404` | Radstand in cm |
-| `wedge_step_cm` | `0.5` | Rundung der Keilhöhen |
+| `wedge_step_cm` | `1` | Rundung der Keilhöhen |
 | `level_green_deg` | `0.5` | Grüner Ring der Libelle in Grad |
 | `level_yellow_deg` | `1.5` | Gelber Ring in Grad |
 | `level_max_deg` | `3.0` | Rand der Libelle in Grad |
