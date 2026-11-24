@@ -23,7 +23,7 @@ substitutions:
   # Keilplan: Fahrzeugmaße in cm und Rundung der Keilhöhen.
   track_cm: "180"
   wheelbase_cm: "404"
-  wedge_step_cm: "0.5"
+  wedge_step_cm: "1"
 
 esphome:
   name: ${device_name}
