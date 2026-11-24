@@ -52,7 +52,7 @@ substitutions:
   # ---- Fahrzeug (Keilplan) ----
   track_cm: "180"        # Spurbreite
   wheelbase_cm: "404"    # Radstand
-  wedge_step_cm: "0.5"   # Rundung der Keilhöhen
+  wedge_step_cm: "1"   # Rundung der Keilhöhen
 
   # Optional: timezone, level_green_deg, level_yellow_deg, level_max_deg
   # (Defaults siehe cockpit-display.yaml)
