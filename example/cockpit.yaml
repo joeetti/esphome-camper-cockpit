@@ -59,7 +59,7 @@ substitutions:
 
 packages:
   cockpit:
-    url: https://github.com/DEIN-GITHUB-NAME/esphome-camper-cockpit
+    url: https://github.com/joeetti/esphome-camper-cockpit
     ref: v1.0.0          # feste Version; für Updates bewusst erhöhen
     files: [cockpit-display.yaml]
     refresh: 1d
