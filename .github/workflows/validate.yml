@@ -1,0 +1,27 @@
+name: ESPHome prüfen
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Feste ESPHome-Version, mit der das Projekt getestet ist.
+      # Bei einem ESPHome-Update hier erhöhen und prüfen, ob alles grün bleibt.
+      - name: ESPHome installieren
+        run: pip install esphome==2026.9.1
+
+      - name: Konfiguration prüfen
+        run: esphome config tests/ci.yaml
+
+      # Vollständiger Firmware-Build: findet auch C++-Fehler in Lambdas.
+      - name: Firmware bauen
+        run: esphome compile tests/ci.yaml
