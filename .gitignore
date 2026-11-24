@@ -1,0 +1,11 @@
+# Niemals hochladen: echte Zugangsdaten
+secrets.yaml
+
+# ESPHome-Build-Ordner und Firmware
+.esphome/
+*.bin
+*.elf
+
+# System
+.DS_Store
+__pycache__/
