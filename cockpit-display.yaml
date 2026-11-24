@@ -1,0 +1,748 @@
+# =====================================================================
+#  ESPHome Camper Cockpit – Paket
+#  Hardware: Guition JC3248W535 (ESP32-S3, 3,5" 480x320, Touch)
+#
+#  Diese Datei NICHT anpassen. Alle eigenen Werte (Entitäten, Adresse,
+#  Secrets) gehören in deine Gerätedatei, siehe example/cockpit.yaml.
+#  Werte aus der Gerätedatei überschreiben die Defaults hier.
+# =====================================================================
+
+substitutions:
+  # ---- Pflichtwerte: müssen in der Gerätedatei gesetzt werden ----
+  # device_name, friendly_name, ha_url, ha_bearer_token,
+  # api_encryption_key, wifi_ssid, wifi_password, fallback_password,
+  # sowie alle entity_* Werte (siehe docs/home-assistant.md)
+
+  # ---- Optionale Werte mit Defaults ----
+  display_title: "CAMPER COCKPIT"
+  timezone: "Europe/Berlin"
+  # Wasserwaage: Toleranzen in Grad. Die drei Ringe der Libelle stehen genau auf diesen Werten.
+  level_green_deg: "0.5"
+  level_yellow_deg: "1.5"
+  level_max_deg: "3.0"
+  # Keilplan: Fahrzeugmaße in cm und Rundung der Keilhöhen.
+  track_cm: "180"
+  wheelbase_cm: "404"
+  wedge_step_cm: "0.5"
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  project:
+    name: "DEIN-GITHUB-NAME.esphome-camper-cockpit"
+    version: "1.0.0"
+  on_boot:
+    priority: -100
+    then:
+      - delay: 4s
+      - script.execute: refresh_ha
+
+esp32:
+  board: esp32-s3-devkitc-1
+  variant: esp32s3
+  flash_size: 16MB
+  framework:
+    type: esp-idf
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+logger:
+api:
+  encryption:
+    key: "${api_encryption_key}"
+  reboot_timeout: 0s
+  on_client_connected:
+    - script.execute: update_level_ui
+  on_client_disconnected:
+    - script.execute: update_level_ui
+ota:
+  - platform: esphome
+    # Uploads laufen verschlüsselt mit dem api-Schlüssel; unverschlüsselte Uploads werden abgelehnt.
+    encryption:
+
+wifi:
+  ssid: "${wifi_ssid}"
+  password: "${wifi_password}"
+  power_save_mode: none
+  reboot_timeout: 10min
+  on_connect:
+    then:
+      - lambda: 'id(wifi_online) = true;'
+      - logger.log: "WLAN verbunden"
+      - delay: 2s
+      - script.execute: refresh_ha
+  on_disconnect:
+    then:
+      - lambda: 'id(wifi_online) = false;'
+      - logger.log: "WLAN getrennt"
+  ap:
+    ssid: "${device_name}"
+    password: "${fallback_password}"
+captive_portal:
+
+external_components:
+  # Fest auf einen Commit gepinnt (Stand 14.10.2026), damit Änderungen im Repo den Build nicht brechen.
+  # Für ein Update: neuen Commit prüfen und den Hash hier bewusst austauschen.
+  - source: github://albert-canfield/esphome-online-video@257a75370c5b5b73d0e06a3ca860237c8941834a
+    components: [online_video]
+
+http_request:
+  id: ha_http
+  timeout: 8s
+  follow_redirects: true
+  buffer_size_rx: 4096
+  buffer_size_tx: 4096
+
+spi:
+  - id: display_qspi
+    type: quad
+    clk_pin: 47
+    data_pins: [21, 48, 40, 39]
+
+i2c:
+  - id: touch_i2c
+    sda: 4
+    scl: 8
+
+output:
+  - platform: ledc
+    id: backlight_pwm
+    pin: 1
+
+light:
+  - platform: monochromatic
+    id: display_backlight
+    name: "Display Hintergrundbeleuchtung"
+    output: backlight_pwm
+    restore_mode: ALWAYS_ON
+
+display:
+  - platform: mipi_spi
+    id: main_display
+    model: JC3248W535
+    spi_id: display_qspi
+    data_rate: 40MHz
+    update_interval: never
+    auto_clear_enabled: false
+
+touchscreen:
+  - platform: axs15231
+    id: main_touchscreen
+    i2c_id: touch_i2c
+    display: main_display
+
+font:
+  - file: "gfonts://Roboto"
+    id: font_14
+    size: 14
+    glyphs: " !%()+,-./0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÄÖÜäöüß°|"
+  - file: "gfonts://Roboto"
+    id: font_18
+    size: 18
+    glyphs: " !%()+,-./0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÄÖÜäöüß°|"
+  - file: "gfonts://Roboto"
+    id: font_24
+    size: 24
+    glyphs: " !%()+,-./0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÄÖÜäöüß°|"
+
+time:
+  - platform: sntp
+    id: cockpit_time
+    timezone: "${timezone}"
+
+online_video:
+  - id: greywater_video
+    url: "${ha_url}/api/camera_proxy_stream/${entity_camera}"
+    resize: 320x240
+    # Seit dem gepinnten Stand ist COVER (Ränder abschneiden) Standard; CONTAIN zeigt wie bisher das ganze Bild.
+    fit: CONTAIN
+    max_fps: 5
+    buffer_size: 150kB
+    autostart: false
+    headers:
+      Authorization: "${ha_bearer_token}"
+    on_frame:
+      - lvgl.image.update:
+          id: camera_view
+          src: greywater_video
+      # Sobald Bilder kommen, Statustext ausblenden (nur einmal, nicht bei jedem Frame neu setzen).
+      - lambda: |-
+          if (lv_label_get_text(id(lbl_camera_status))[0] != '\0') {
+            lv_label_set_text(id(lbl_camera_status), "");
+          }
+    on_error:
+      - lvgl.label.update:
+          id: lbl_camera_status
+          text: "STREAM-FEHLER"
+
+globals:
+  - {id: booster_on, type: bool, restore_value: no, initial_value: "false"}
+  - {id: floodlight_on, type: bool, restore_value: no, initial_value: "false"}
+  - {id: esp_cam_on, type: bool, restore_value: no, initial_value: "false"}
+  - {id: level_live_on, type: bool, restore_value: no, initial_value: "false"}
+  - {id: level_page_active, type: bool, restore_value: no, initial_value: "false"}
+  - {id: camera_page_active, type: bool, restore_value: no, initial_value: "false"}
+  - {id: wifi_online, type: bool, restore_value: no, initial_value: "false"}
+  - {id: ha_error_count, type: int, restore_value: no, initial_value: "0"}
+  - {id: last_ha_status, type: int, restore_value: no, initial_value: "0"}
+  - {id: last_ha_duration_ms, type: uint32_t, restore_value: no, initial_value: "0"}
+
+binary_sensor:
+  - platform: status
+    id: cockpit_verbindung
+    name: "Cockpit Verbindung"
+    device_class: connectivity
+    entity_category: diagnostic
+
+  # Wasserwaage: Live-Schalter kommt per Push von Home Assistant (kein Polling).
+  - platform: homeassistant
+    id: level_live_ha
+    entity_id: ${entity_level_live}
+    on_state:
+      - lambda: 'id(level_live_on) = x;'
+      - script.execute: update_level_ui
+
+sensor:
+  - platform: wifi_signal
+    id: cockpit_wifi_rssi
+    name: "Cockpit WLAN RSSI"
+    update_interval: 30s
+
+  # Wasserwaage: Werte kommen per Push über die native API, sobald sie sich ändern.
+  # Nicht verfügbare Entitäten liefern NAN und werden als "--" angezeigt.
+  - platform: homeassistant
+    id: level_pitch
+    entity_id: ${entity_level_pitch}
+    on_value: {script.execute: update_level_ui}
+  - platform: homeassistant
+    id: level_roll
+    entity_id: ${entity_level_roll}
+    on_value: {script.execute: update_level_ui}
+  - platform: homeassistant
+    id: level_battery
+    entity_id: ${entity_level_battery}
+    on_value: {script.execute: update_level_ui}
+  - platform: homeassistant
+    id: level_voltage
+    entity_id: ${entity_level_voltage}
+    on_value: {script.execute: update_level_ui}
+
+script:
+  - id: refresh_ha
+    mode: single
+    then:
+      - if:
+          condition:
+            lambda: 'return id(camera_page_active) || !id(wifi_online);'
+          then:
+            - lambda: |-
+                if (!id(wifi_online)) {
+                  lv_label_set_text(id(lbl_ha), "WLAN OFFLINE");
+                }
+                ESP_LOGW("cockpit", "HA-Abruf ausgesetzt: Kamera=%s WLAN=%s",
+                         id(camera_page_active) ? "aktiv" : "inaktiv",
+                         id(wifi_online) ? "online" : "offline");
+          else:
+            - http_request.post:
+                url: "${ha_url}/api/template"
+                request_headers:
+                  Authorization: "${ha_bearer_token}"
+                  Content-Type: application/json
+                capture_response: true
+                max_response_buffer_size: 8192
+                body: >-
+                  {"template":"{{ {'booster':states('${entity_booster}'),'battery':states('${entity_battery_soc}'),'battery_unit':state_attr('${entity_battery_soc}','unit_of_measurement') or '','in_a':states('${entity_dcdc_in_current}'),'in_w':states('${entity_dcdc_in_power}'),'out_a':states('${entity_dcdc_out_current}'),'out_w':states('${entity_dcdc_out_power}'),'mode_absorption':states('${entity_dcdc_state_absorption}'),'mode_bulk':states('${entity_dcdc_state_bulk}'),'mode_fault':states('${entity_dcdc_state_fault}'),'mode_float':states('${entity_dcdc_state_float}'),'mode_off':states('${entity_dcdc_state_off}'),'prod_a':states('${entity_production_current}'),'prod_a_unit':state_attr('${entity_production_current}','unit_of_measurement') or '','prod':states('${entity_production_power}'),'prod_unit':state_attr('${entity_production_power}','unit_of_measurement') or '','floodlight':states('${entity_floodlight}'),'esp_cam':states('${entity_camera_power}'),'rssi':states('${entity_camera_rssi}'),'outside_temp':states('${entity_outside_temp}'),'outside_temp_unit':state_attr('${entity_outside_temp}','unit_of_measurement') or ''} | tojson }}"}
+                on_response:
+                  then:
+                    - lambda: |-
+                        id(last_ha_status) = response->status_code;
+                        id(last_ha_duration_ms) = response->duration_ms;
+
+                        if (response->status_code != 200) {
+                          id(ha_error_count)++;
+                          ESP_LOGW("cockpit", "HA HTTP-Fehler: status=%d duration=%lums Folgefehler=%d RSSI=%.0fdBm",
+                                   response->status_code,
+                                   (unsigned long) response->duration_ms,
+                                   id(ha_error_count),
+                                   id(cockpit_wifi_rssi).state);
+                          if (id(ha_error_count) >= 3) {
+                            lv_label_set_text(id(lbl_ha), "WLAN OK | HA OFFLINE");
+                          }
+                          return;
+                        }
+
+                        id(ha_error_count) = 0;
+                        char diag[64];
+                        // Kurzform, damit sie in das 168 px breite Feld passt (Status 200 steckt schon im "HA").
+                        snprintf(diag, sizeof(diag), "HA %lums | %.0fdBm",
+                                 (unsigned long) response->duration_ms,
+                                 id(cockpit_wifi_rssi).state);
+                        lv_label_set_text(id(lbl_ha), diag);
+                        ESP_LOGI("cockpit", "HA OK: status=%d duration=%lums RSSI=%.0fdBm",
+                                 response->status_code,
+                                 (unsigned long) response->duration_ms,
+                                 id(cockpit_wifi_rssi).state);
+
+                        const bool parsed = json::parse_json(body, [](JsonObject r) -> bool {
+                          auto txt = [](JsonVariant v) { return std::string(v | "--"); };
+                          // Liefert NAN, wenn der Zustand keine Zahl ist (z. B. "unavailable" oder "unknown").
+                          auto num = [](JsonVariant v) -> float {
+                            const char *s = v | "";
+                            char *end = nullptr;
+                            float f = strtof(s, &end);
+                            if (end == s) return NAN;
+                            while (*end == ' ') end++;
+                            return *end == '\0' ? f : NAN;
+                          };
+                          // Formatiert eine Zahl, oder "--" wenn sie fehlt.
+                          auto fmt = [](char *o, size_t n, const char *f, float x) {
+                            if (std::isnan(x)) snprintf(o, n, "--");
+                            else snprintf(o, n, f, x);
+                          };
+
+                          id(booster_on) = txt(r["booster"]) == "on";
+                          id(floodlight_on) = txt(r["floodlight"]) == "on";
+                          id(esp_cam_on) = txt(r["esp_cam"]) == "on";
+
+                          lv_label_set_text(id(lbl_booster), id(booster_on) ? "EIN" : "AUS");
+                          lv_obj_set_style_text_color(id(lbl_booster), lv_color_hex(id(booster_on) ? 0x63D471 : 0xFFFFFF), LV_PART_MAIN);
+                          lv_obj_set_style_bg_color(id(booster_switch_bg), lv_color_hex(id(booster_on) ? 0x63D471 : 0x4A5560), LV_PART_MAIN);
+                          lv_obj_set_x(id(booster_switch_knob), id(booster_on) ? 33 : 3);
+
+                          lv_label_set_text(id(lbl_floodlight), id(floodlight_on) ? "FLUTLICHT EIN" : "FLUTLICHT AUS");
+                          lv_label_set_text(id(lbl_live_light), id(floodlight_on) ? "FLUTLICHT EIN" : "FLUTLICHT AUS");
+                          lv_label_set_text(id(lbl_esp_cam), id(esp_cam_on) ? "KAMERA EIN" : "KAMERA AUS");
+                          lv_obj_set_style_bg_color(id(btn_esp_cam), lv_color_hex(id(esp_cam_on) ? 0x2F7D4A : 0x192630), LV_PART_MAIN);
+                          lv_obj_set_style_bg_color(id(btn_floodlight), lv_color_hex(id(floodlight_on) ? 0x8A6A16 : 0x192630), LV_PART_MAIN);
+
+                          char b[120], v1[16], v2[16];
+                          float soc = num(r["battery"]);
+                          if (std::isnan(soc)) {
+                            lv_label_set_text(id(lbl_battery), "-- %");
+                            lv_obj_set_width(id(battery_fill), 0);
+                            lv_obj_set_style_text_color(id(lbl_battery), lv_color_hex(0xAAB8C2), LV_PART_MAIN);
+                          } else {
+                            float soc_clamped = fmax(0.0f, fmin(100.0f, soc));
+                            snprintf(b, sizeof(b), "%.0f %%", soc_clamped);
+                            lv_label_set_text(id(lbl_battery), b);
+                            int fill_w = (int) roundf(91.0f * soc_clamped / 100.0f);
+                            lv_obj_set_width(id(battery_fill), fill_w);
+                            uint32_t bc = soc_clamped < 20.0f ? 0xFF5C5C : (soc_clamped < 50.0f ? 0xFFCC48 : 0x63D471);
+                            lv_obj_set_style_bg_color(id(battery_fill), lv_color_hex(bc), LV_PART_MAIN);
+                            lv_obj_set_style_text_color(id(lbl_battery), lv_color_hex(bc), LV_PART_MAIN);
+                          }
+
+                          fmt(v1, sizeof(v1), "%.1f", num(r["in_a"]));
+                          fmt(v2, sizeof(v2), "%.0f", num(r["in_w"]));
+                          snprintf(b, sizeof(b), "IN %s A | %s W", v1, v2);
+                          lv_label_set_text(id(lbl_input), b);
+                          fmt(v1, sizeof(v1), "%.1f", num(r["out_a"]));
+                          fmt(v2, sizeof(v2), "%.0f", num(r["out_w"]));
+                          snprintf(b, sizeof(b), "OUT %s A | %s W", v1, v2);
+                          lv_label_set_text(id(lbl_output), b);
+
+                          std::string mode = "UNBEKANNT";
+                          uint32_t mc = 0xAAB8C2;
+                          if (txt(r["mode_fault"]) == "on") { mode = "FEHLER"; mc = 0xFF5C5C; }
+                          else if (txt(r["mode_bulk"]) == "on") { mode = "BULK"; mc = 0xFFCC48; }
+                          else if (txt(r["mode_absorption"]) == "on") { mode = "ABSORPTION"; mc = 0x53BDEC; }
+                          else if (txt(r["mode_float"]) == "on") { mode = "FLOAT"; mc = 0x63D471; }
+                          else if (txt(r["mode_off"]) == "on") { mode = "AUS"; mc = 0xAAB8C2; }
+                          lv_label_set_text(id(lbl_dcdc_mode), mode.c_str());
+                          lv_obj_set_style_text_color(id(lbl_dcdc_mode), lv_color_hex(mc), LV_PART_MAIN);
+
+                          float temp = num(r["outside_temp"]);
+                          if (std::isnan(temp)) snprintf(b, sizeof(b), "--");
+                          else snprintf(b, sizeof(b), "%.1f %s", temp, txt(r["outside_temp_unit"]).c_str());
+                          lv_label_set_text(id(lbl_outside_temp), b);
+                          fmt(v1, sizeof(v1), "%.1f", num(r["prod_a"]));
+                          fmt(v2, sizeof(v2), "%.1f", num(r["prod"]));
+                          snprintf(b, sizeof(b), "STROMPRODUKTION GESAMT %s %s | %s %s",
+                                   v1, txt(r["prod_a_unit"]).c_str(),
+                                   v2, txt(r["prod_unit"]).c_str());
+                          lv_label_set_text(id(lbl_production), b);
+                          fmt(v1, sizeof(v1), "%.0f", num(r["rssi"]));
+                          snprintf(b, sizeof(b), "KAMERA-WLAN %s dBm", v1);
+                          lv_label_set_text(id(lbl_rssi), b);
+
+                          return true;
+                        });
+
+                        if (!parsed) {
+                          id(ha_error_count)++;
+                          ESP_LOGW("cockpit", "HA JSON konnte nicht ausgewertet werden");
+                          if (id(ha_error_count) >= 3) {
+                            lv_label_set_text(id(lbl_ha), "HA JSON FEHLER");
+                          }
+                        }
+                on_error:
+                  then:
+                    - lambda: |-
+                        id(ha_error_count)++;
+                        ESP_LOGW("cockpit", "HA Transportfehler: Folgefehler=%d WLAN=%s RSSI=%.0fdBm",
+                                 id(ha_error_count),
+                                 id(wifi_online) ? "online" : "offline",
+                                 id(cockpit_wifi_rssi).state);
+                    - if:
+                        condition:
+                          lambda: 'return !id(wifi_online);'
+                        then:
+                          - lvgl.label.update:
+                              id: lbl_ha
+                              text: "WLAN OFFLINE"
+                        else:
+                          - if:
+                              condition:
+                                lambda: 'return id(ha_error_count) >= 3;'
+                              then:
+                                - lvgl.label.update:
+                                    id: lbl_ha
+                                    text: "WLAN OK | HA OFFLINE"
+
+  - id: toggle_booster
+    then:
+      - http_request.post:
+          url: !lambda 'return std::string("${ha_url}/api/services/homeassistant/") + (id(booster_on) ? "turn_off" : "turn_on");'
+          request_headers: {Authorization: "${ha_bearer_token}", Content-Type: application/json}
+          body: '{"entity_id":"${entity_booster}"}'
+      - delay: 500ms
+      - script.execute: refresh_ha
+
+  - id: toggle_floodlight
+    then:
+      - http_request.post:
+          url: !lambda 'return std::string("${ha_url}/api/services/homeassistant/") + (id(floodlight_on) ? "turn_off" : "turn_on");'
+          request_headers: {Authorization: "${ha_bearer_token}", Content-Type: application/json}
+          body: '{"entity_id":"${entity_floodlight}"}'
+      - delay: 500ms
+      - script.execute: refresh_ha
+
+  - id: toggle_esp_cam
+    then:
+      - http_request.post:
+          url: !lambda 'return std::string("${ha_url}/api/services/homeassistant/") + (id(esp_cam_on) ? "turn_off" : "turn_on");'
+          request_headers: {Authorization: "${ha_bearer_token}", Content-Type: application/json}
+          body: '{"entity_id":"${entity_camera_power}"}'
+      - delay: 800ms
+      - script.execute: refresh_ha
+
+  - id: set_level_live_on
+    mode: restart
+    then:
+      - http_request.post:
+          url: "${ha_url}/api/services/homeassistant/turn_on"
+          request_headers: {Authorization: "${ha_bearer_token}", Content-Type: application/json}
+          body: '{"entity_id":"${entity_level_live}"}'
+      - lambda: 'id(level_live_on) = true;'
+      - script.execute: update_level_ui
+
+  - id: set_level_live_off
+    mode: restart
+    then:
+      - http_request.post:
+          url: "${ha_url}/api/services/homeassistant/turn_off"
+          request_headers: {Authorization: "${ha_bearer_token}", Content-Type: application/json}
+          body: '{"entity_id":"${entity_level_live}"}'
+      - lambda: 'id(level_live_on) = false;'
+      - script.execute: update_level_ui
+
+  # Zeichnet die Wasserwaage aus den Push-Werten. Kein HTTP, blockiert also nichts.
+  - id: update_level_ui
+    then:
+      - lambda: |-
+          if (!id(level_page_active)) return;
+
+          const float T_GREEN = (float) ${level_green_deg};
+          const float T_YELLOW = (float) ${level_yellow_deg};
+          const float T_MAX = (float) ${level_max_deg};
+          // Radien der gezeichneten Ringe in Pixeln (Mitte der Blase).
+          const float R_GREEN = 35.0f, R_YELLOW = 70.0f, R_MAX = 80.0f;
+          auto zone = [&](float t) -> uint32_t {
+            return t <= T_GREEN ? 0x63D471 : (t <= T_YELLOW ? 0xFFCC48 : 0xFF5C5C);
+          };
+
+          const bool api_ok = api::global_api_server->is_connected();
+          float pitch = api_ok ? id(level_pitch).state : NAN;
+          float roll = api_ok ? id(level_roll).state : NAN;
+          float bat = api_ok ? id(level_battery).state : NAN;
+          float volt = api_ok ? id(level_voltage).state : NAN;
+
+          if (!api_ok) {
+            lv_label_set_text(id(lbl_level_live), "API GETRENNT");
+            lv_obj_set_style_text_color(id(lbl_level_live), lv_color_hex(0xFF5C5C), LV_PART_MAIN);
+          } else {
+            lv_label_set_text(id(lbl_level_live), id(level_live_on) ? "LIVE EIN" : "LIVE AUS");
+            lv_obj_set_style_text_color(id(lbl_level_live), lv_color_hex(id(level_live_on) ? 0x63D471 : 0xAAB8C2), LV_PART_MAIN);
+          }
+
+          char b[48], sb[16], sv[16];
+          if (std::isnan(pitch)) snprintf(b, sizeof(b), "-- °"); else snprintf(b, sizeof(b), "%+.2f °", pitch);
+          lv_label_set_text(id(lbl_pitch), b);
+          lv_obj_set_style_text_color(id(lbl_pitch), lv_color_hex(std::isnan(pitch) ? 0xAAB8C2 : zone(fabsf(pitch))), LV_PART_MAIN);
+          if (std::isnan(roll)) snprintf(b, sizeof(b), "-- °"); else snprintf(b, sizeof(b), "%+.2f °", roll);
+          lv_label_set_text(id(lbl_roll), b);
+          lv_obj_set_style_text_color(id(lbl_roll), lv_color_hex(std::isnan(roll) ? 0xAAB8C2 : zone(fabsf(roll))), LV_PART_MAIN);
+
+          if (std::isnan(bat)) snprintf(sb, sizeof(sb), "--"); else snprintf(sb, sizeof(sb), "%.0f", bat);
+          if (std::isnan(volt)) snprintf(sv, sizeof(sv), "--"); else snprintf(sv, sizeof(sv), "%.3f", volt);
+          snprintf(b, sizeof(b), "BAT %s %% | %s V", sb, sv);
+          lv_label_set_text(id(lbl_level_battery), b);
+
+          // Keilplan: Wie viel muss jedes Rad angehoben werden, damit das Fahrzeug waagerecht steht?
+          // Annahme wie in der HA-Karte: Längsneigung positiv = vorn hoch, Querneigung positiv = rechts hoch.
+          {
+            const float TRACK = (float) ${track_cm}, WB = (float) ${wheelbase_cm}, STEP = (float) ${wedge_step_cm};
+            lv_obj_t *wl[4] = {id(lbl_wedge_fl), id(lbl_wedge_fr), id(lbl_wedge_rl), id(lbl_wedge_rr)};
+            if (std::isnan(pitch) || std::isnan(roll)) {
+              for (auto *l : wl) {
+                lv_label_set_text(l, "--");
+                lv_obj_set_style_text_color(l, lv_color_hex(0xAAB8C2), LV_PART_MAIN);
+              }
+            } else {
+              const float D2R = 3.14159265f / 180.0f;
+              float dz_front = WB * tanf(pitch * D2R);    // Höhe der Vorderachse über der Hinterachse
+              float dz_right = TRACK * tanf(roll * D2R);  // Höhe rechts über links
+              // Relative Höhe jedes Rades: vorn links, vorn rechts, hinten links, hinten rechts
+              float z[4] = {dz_front, dz_front + dz_right, 0.0f, dz_right};
+              float zmax = fmaxf(fmaxf(z[0], z[1]), fmaxf(z[2], z[3]));
+              for (int i = 0; i < 4; i++) {
+                // Das höchste Rad bleibt bei 0, alle anderen werden auf seine Höhe gebracht.
+                float lift = roundf((zmax - z[i]) / STEP) * STEP;
+                char w[16];
+                if (lift <= 0.0f) {
+                  snprintf(w, sizeof(w), "0");
+                } else {
+                  snprintf(w, sizeof(w), "%.1f", lift);
+                  size_t n = strlen(w);
+                  if (n >= 2 && w[n - 2] == '.' && w[n - 1] == '0') w[n - 2] = '\0';  // "1.0" -> "1"
+                  for (char *c = w; *c; c++) if (*c == '.') *c = ',';                 // deutsches Komma
+                  strncat(w, " cm", sizeof(w) - strlen(w) - 1);
+                }
+                lv_label_set_text(wl[i], w);
+                lv_obj_set_style_text_color(wl[i], lv_color_hex(lift <= 0.0f ? 0xAAB8C2 : 0xF08A4B), LV_PART_MAIN);
+              }
+            }
+          }
+
+          if (std::isnan(pitch) || std::isnan(roll)) {
+            // Keine Daten: Blase grau in die Mitte.
+            lv_obj_set_pos(id(level_bubble), 85, 85);
+            lv_obj_set_style_bg_color(id(level_bubble), lv_color_hex(0x56636D), LV_PART_MAIN);
+            return;
+          }
+
+          // Gesamtneigung (Kreise sind rund, also zählt der Abstand zur Mitte).
+          float tilt = sqrtf(pitch * pitch + roll * roll);
+          // Abschnittsweise Skala: 0..grün -> innerer Ring, grün..gelb -> mittlerer Ring, gelb..max -> Rand.
+          float rpx;
+          if (tilt <= T_GREEN) rpx = tilt / T_GREEN * R_GREEN;
+          else if (tilt <= T_YELLOW) rpx = R_GREEN + (tilt - T_GREEN) / (T_YELLOW - T_GREEN) * (R_YELLOW - R_GREEN);
+          else rpx = R_YELLOW + fminf(tilt - T_YELLOW, T_MAX - T_YELLOW) / (T_MAX - T_YELLOW) * (R_MAX - R_YELLOW);
+          float dx = 0.0f, dy = 0.0f;
+          if (tilt > 0.0001f) {
+            dx = roll / tilt * rpx;
+            dy = -pitch / tilt * rpx;
+          }
+          lv_obj_set_pos(id(level_bubble), 85 + (int) roundf(dx), 85 + (int) roundf(dy));
+          lv_obj_set_style_bg_color(id(level_bubble), lv_color_hex(zone(tilt)), LV_PART_MAIN);
+
+interval:
+  - interval: 1s
+    then:
+      - lambda: |-
+          auto now = id(cockpit_time).now();
+          if (now.is_valid()) {
+            char t[6];
+            snprintf(t, sizeof(t), "%02d:%02d", now.hour, now.minute);
+            lv_label_set_text(id(lbl_time), t);
+          }
+  - interval: 20s
+    then:
+      - script.execute: refresh_ha
+
+lvgl:
+  displays:
+    - main_display
+  touchscreens:
+    - touchscreen_id: main_touchscreen
+  rotation: 90
+  buffer_size: 25%
+  bg_color: 0x101820
+  text_color: 0xF4F7FA
+  pages:
+    - id: energy_page
+      bg_color: 0x101820
+      scrollable: false
+      widgets:
+        - label: {x: 12, y: 11, text: "${display_title}", text_color: 0x53BDEC, text_font: font_14}
+        - label: {id: lbl_time, x: 190, y: 8, width: 100, text: "--:--", text_align: CENTER, text_color: 0xFFFFFF, text_font: font_18}
+        - label: {id: lbl_ha, x: 300, y: 11, width: 168, text: "HA WARTE", text_align: RIGHT, text_color: 0x63D471, text_font: font_14, long_mode: DOT}
+        - obj:
+            x: 8
+            y: 40
+            width: 135
+            height: 180
+            pad_all: 0
+            bg_color: 0x192630
+            border_width: 0
+            radius: 12
+            scrollable: false
+            widgets:
+              - label: {x: 0, y: 12, width: 135, text: "BATTERIE", text_align: CENTER, text_color: 0xAAB8C2, text_font: font_18}
+              - obj:
+                  x: 12
+                  y: 58
+                  width: 105
+                  height: 52
+                  pad_all: 0
+                  bg_opa: TRANSP
+                  border_color: 0xFFFFFF
+                  border_width: 3
+                  radius: 7
+                  scrollable: false
+                  widgets:
+                    - obj: {id: battery_fill, x: 4, y: 4, width: 0, height: 38, pad_all: 0, bg_color: 0x63D471, border_width: 0, radius: 3, scrollable: false}
+              - obj: {x: 117, y: 74, width: 7, height: 20, bg_color: 0xFFFFFF, border_width: 0, radius: 2, scrollable: false}
+              - label: {id: lbl_battery, x: 0, y: 125, width: 135, text: "-- %", text_align: CENTER, text_color: 0xFFFFFF, text_font: font_24}
+        - button:
+            x: 151
+            y: 40
+            width: 190
+            height: 180
+            pad_all: 0
+            bg_color: 0x192630
+            border_width: 0
+            radius: 12
+            on_click: [{script.execute: toggle_booster}]
+            widgets:
+              - label: {x: 0, y: 8, width: 190, text: "LADEBOOSTER", text_align: CENTER, text_color: 0xAAB8C2, text_font: font_18}
+              - label: {id: lbl_booster, x: 26, y: 43, width: 58, text: "--", text_align: CENTER, text_color: 0xFFFFFF, text_font: font_18}
+              - obj: {id: booster_switch_bg, x: 102, y: 39, width: 58, height: 28, pad_all: 0, bg_color: 0x4A5560, border_width: 0, radius: 14, scrollable: false, widgets: [{obj: {id: booster_switch_knob, x: 3, y: 3, width: 22, height: 22, pad_all: 0, bg_color: 0xFFFFFF, border_width: 0, radius: 11, scrollable: false}}]}
+              - label: {id: lbl_dcdc_mode, x: 4, y: 77, width: 182, text: "--", text_align: CENTER, text_color: 0xFFFFFF, text_font: font_18, long_mode: DOT}
+              - label: {id: lbl_input, x: 0, y: 112, width: 190, text: "IN --", text_align: CENTER, text_color: 0xFFFFFF, text_font: font_14}
+              - label: {id: lbl_output, x: 0, y: 142, width: 190, text: "OUT --", text_align: CENTER, text_color: 0xFFFFFF, text_font: font_14}
+        - obj:
+            x: 349
+            y: 40
+            width: 123
+            height: 180
+            pad_all: 0
+            bg_color: 0x192630
+            border_width: 0
+            radius: 12
+            scrollable: false
+            widgets:
+              - label: {x: 0, y: 12, width: 123, text: "AUSSEN", text_align: CENTER, text_color: 0xAAB8C2, text_font: font_14}
+              - label: {id: lbl_outside_temp, x: 4, y: 70, width: 115, text: "--", text_align: CENTER, text_color: 0xFFFFFF, text_font: font_24, long_mode: DOT}
+              - label: {x: 0, y: 112, width: 123, text: "TEMPERATUR", text_align: CENTER, text_color: 0xAAB8C2, text_font: font_14}
+        - obj: {x: 8, y: 228, width: 464, height: 43, pad_all: 0, bg_color: 0x192630, border_width: 0, radius: 9, scrollable: false, widgets: [{label: {id: lbl_production, align: CENTER, text: "STROMPRODUKTION --", text_align: CENTER, text_color: 0xFFFFFF, text_font: font_18}}]}
+        - button: {x: 8, y: 280, width: 148, height: 34, bg_color: 0x245A73, border_width: 0, radius: 8, on_click: [{lvgl.page.show: energy_page}], widgets: [{label: {align: CENTER, text: "ENERGIE", text_color: 0xFFFFFF, text_font: font_14}}]}
+        - button: {x: 166, y: 280, width: 148, height: 34, bg_color: 0x192630, border_width: 0, radius: 8, on_click: [{lvgl.page.show: greywater_page}], widgets: [{label: {align: CENTER, text: "GRAUWASSER", text_color: 0xFFFFFF, text_font: font_14}}]}
+        - button: {x: 324, y: 280, width: 148, height: 34, bg_color: 0x192630, border_width: 0, radius: 8, on_click: [{lvgl.page.show: level_page}], widgets: [{label: {align: CENTER, text: "WASSERWAAGE", text_color: 0xFFFFFF, text_font: font_14}}]}
+
+    - id: greywater_page
+      bg_color: 0x101820
+      scrollable: false
+      widgets:
+        - label: {x: 12, y: 11, text: "GRAUWASSERTANK", text_color: 0x53BDEC, text_font: font_14}
+        - label: {id: lbl_rssi, x: 280, y: 11, width: 180, text: "KAMERA-WLAN --", text_align: RIGHT, text_color: 0xFFFFFF, text_font: font_14}
+        - button: {x: 48, y: 46, width: 384, height: 134, bg_color: 0x192630, border_color: 0x245A73, border_width: 2, radius: 14, on_click: [{lvgl.page.show: camera_page}], widgets: [{label: {align: CENTER, y: -16, text: "LIVEBILD", text_color: 0x53BDEC, text_font: font_24}}, {label: {align: CENTER, y: 22, text: "ANTIPPEN ZUM STARTEN", text_color: 0xFFFFFF, text_font: font_18}}]}
+        - button: {id: btn_esp_cam, x: 48, y: 190, width: 186, height: 80, bg_color: 0x192630, border_width: 0, radius: 10, on_click: [{script.execute: toggle_esp_cam}], widgets: [{label: {id: lbl_esp_cam, align: CENTER, text: "KAMERA --", text_color: 0xFFFFFF, text_font: font_18}}]}
+        - button: {id: btn_floodlight, x: 246, y: 190, width: 186, height: 80, bg_color: 0x192630, border_width: 0, radius: 10, on_click: [{script.execute: toggle_floodlight}], widgets: [{label: {id: lbl_floodlight, align: CENTER, text: "FLUTLICHT --", text_color: 0xFFFFFF, text_font: font_18}}]}
+        - button: {x: 8, y: 280, width: 148, height: 34, bg_color: 0x192630, border_width: 0, radius: 8, on_click: [{lvgl.page.show: energy_page}], widgets: [{label: {align: CENTER, text: "ENERGIE", text_color: 0xFFFFFF, text_font: font_14}}]}
+        - button: {x: 166, y: 280, width: 148, height: 34, bg_color: 0x245A73, border_width: 0, radius: 8, on_click: [{lvgl.page.show: greywater_page}], widgets: [{label: {align: CENTER, text: "GRAUWASSER", text_color: 0xFFFFFF, text_font: font_14}}]}
+        - button: {x: 324, y: 280, width: 148, height: 34, bg_color: 0x192630, border_width: 0, radius: 8, on_click: [{lvgl.page.show: level_page}], widgets: [{label: {align: CENTER, text: "WASSERWAAGE", text_color: 0xFFFFFF, text_font: font_14}}]}
+
+    - id: level_page
+      bg_color: 0x101820
+      scrollable: false
+      on_load:
+        - lambda: 'id(level_page_active) = true;'
+        - script.execute: update_level_ui
+        - script.execute: set_level_live_on
+      on_unload:
+        - lambda: 'id(level_page_active) = false;'
+        - script.execute: set_level_live_off
+      widgets:
+        - label: {x: 12, y: 11, text: "WASSERWAAGE", text_color: 0x53BDEC, text_font: font_14}
+        - label: {id: lbl_level_live, x: 205, y: 11, width: 100, text: "LIVE AUS", text_align: CENTER, text_color: 0x63D471, text_font: font_14}
+        - label: {id: lbl_level_battery, x: 310, y: 11, width: 162, text: "BAT -- % | -- V", text_align: RIGHT, text_color: 0xAAB8C2, text_font: font_14}
+        - label: {x: 214, y: 42, width: 125, text: "LÄNGS", text_align: CENTER, text_color: 0xAAB8C2, text_font: font_14}
+        - label: {id: lbl_pitch, x: 214, y: 62, width: 125, text: "-- °", text_align: CENTER, text_color: 0xFFFFFF, text_font: font_18}
+        - label: {x: 347, y: 42, width: 125, text: "QUER", text_align: CENTER, text_color: 0xAAB8C2, text_font: font_14}
+        - label: {id: lbl_roll, x: 347, y: 62, width: 125, text: "-- °", text_align: CENTER, text_color: 0xFFFFFF, text_font: font_18}
+        # Keilplan: Draufsicht mit Keilhöhe je Rad (links/rechts in Fahrtrichtung).
+        - obj:
+            x: 214
+            y: 92
+            width: 258
+            height: 180
+            pad_all: 0
+            bg_color: 0x192630
+            border_width: 0
+            radius: 12
+            scrollable: false
+            widgets:
+              - label: {x: 10, y: 7, text: "KEILPLAN", text_color: 0xAAB8C2, text_font: font_14}
+              - label: {x: 0, y: 7, width: 258, text: "vorn", text_align: CENTER, text_color: 0xAAB8C2, text_font: font_14}
+              # Räder
+              - obj: {x: 96, y: 46, width: 8, height: 24, pad_all: 0, bg_color: 0x0B1015, border_width: 0, radius: 2, scrollable: false}
+              - obj: {x: 154, y: 46, width: 8, height: 24, pad_all: 0, bg_color: 0x0B1015, border_width: 0, radius: 2, scrollable: false}
+              - obj: {x: 96, y: 132, width: 8, height: 24, pad_all: 0, bg_color: 0x0B1015, border_width: 0, radius: 2, scrollable: false}
+              - obj: {x: 154, y: 132, width: 8, height: 24, pad_all: 0, bg_color: 0x0B1015, border_width: 0, radius: 2, scrollable: false}
+              # Aufbau mit Frontscheibe
+              - obj: {x: 104, y: 30, width: 50, height: 140, pad_all: 0, bg_color: 0x4A5560, border_color: 0x6B7782, border_width: 1, radius: 10, scrollable: false}
+              - obj: {x: 110, y: 40, width: 38, height: 10, pad_all: 0, bg_color: 0x2C353D, border_width: 0, radius: 3, scrollable: false}
+              # Keilhöhen
+              - label: {id: lbl_wedge_fl, x: 4, y: 48, width: 86, text: "--", text_align: RIGHT, text_color: 0xAAB8C2, text_font: font_18}
+              - label: {id: lbl_wedge_fr, x: 168, y: 48, width: 86, text: "--", text_align: LEFT, text_color: 0xAAB8C2, text_font: font_18}
+              - label: {id: lbl_wedge_rl, x: 4, y: 134, width: 86, text: "--", text_align: RIGHT, text_color: 0xAAB8C2, text_font: font_18}
+              - label: {id: lbl_wedge_rr, x: 168, y: 134, width: 86, text: "--", text_align: LEFT, text_color: 0xAAB8C2, text_font: font_18}
+        - obj:
+            x: 12
+            y: 57
+            width: 190
+            height: 190
+            pad_all: 0
+            bg_opa: TRANSP
+            border_width: 0
+            scrollable: false
+            widgets:
+              - obj: {id: level_outer_ring, align: CENTER, width: 190, height: 190, pad_all: 0, bg_opa: TRANSP, border_color: 0xFF5C5C, border_width: 4, radius: 95, scrollable: false}
+              - obj: {align: CENTER, width: 140, height: 140, pad_all: 0, bg_opa: TRANSP, border_color: 0xFFCC48, border_width: 3, radius: 70, scrollable: false}
+              - obj: {align: CENTER, width: 70, height: 70, pad_all: 0, bg_opa: TRANSP, border_color: 0x63D471, border_width: 3, radius: 35, scrollable: false}
+              - obj: {align: CENTER, width: 2, height: 160, pad_all: 0, bg_color: 0x56636D, border_width: 0, scrollable: false}
+              - obj: {align: CENTER, width: 160, height: 2, pad_all: 0, bg_color: 0x56636D, border_width: 0, scrollable: false}
+              - obj: {align: CENTER, width: 10, height: 10, pad_all: 0, bg_color: 0xFFFFFF, border_width: 0, radius: 5, scrollable: false}
+              - obj: {id: level_bubble, x: 85, y: 85, width: 20, height: 20, pad_all: 0, bg_color: 0x63D471, border_color: 0xFFFFFF, border_width: 2, radius: 10, scrollable: false}
+        - button: {x: 8, y: 280, width: 148, height: 34, bg_color: 0x192630, border_width: 0, radius: 8, on_click: [{lvgl.page.show: energy_page}], widgets: [{label: {align: CENTER, text: "ENERGIE", text_color: 0xFFFFFF, text_font: font_14}}]}
+        - button: {x: 166, y: 280, width: 148, height: 34, bg_color: 0x192630, border_width: 0, radius: 8, on_click: [{lvgl.page.show: greywater_page}], widgets: [{label: {align: CENTER, text: "GRAUWASSER", text_color: 0xFFFFFF, text_font: font_14}}]}
+        - button: {x: 324, y: 280, width: 148, height: 34, bg_color: 0x245A73, border_width: 0, radius: 8, on_click: [{lvgl.page.show: level_page}], widgets: [{label: {align: CENTER, text: "WASSERWAAGE", text_color: 0xFFFFFF, text_font: font_14}}]}
+
+    - id: camera_page
+      bg_color: 0x000000
+      scrollable: false
+      on_load:
+        - lambda: 'id(camera_page_active) = true;'
+        - lvgl.label.update: {id: lbl_camera_status, text: "VERBINDE STREAM..."}
+        - online_video.start: greywater_video
+      on_unload:
+        - online_video.stop: greywater_video
+        - lambda: 'id(camera_page_active) = false;'
+        - delay: 500ms
+        - script.execute: refresh_ha
+      widgets:
+        - image: {id: camera_view, x: 80, y: 15, width: 320, height: 240, src: greywater_video}
+        # Rotes Ziel-Fadenkreuz, Mittelpunkt des 320x240-Videobildes bei Displaykoordinate 240/135.
+        - obj: {x: 195, y: 134, width: 30, height: 2, pad_all: 0, bg_color: 0xFF3B30, border_width: 0, scrollable: false}
+        - obj: {x: 255, y: 134, width: 30, height: 2, pad_all: 0, bg_color: 0xFF3B30, border_width: 0, scrollable: false}
+        - obj: {x: 239, y: 90, width: 2, height: 30, pad_all: 0, bg_color: 0xFF3B30, border_width: 0, scrollable: false}
+        - obj: {x: 239, y: 150, width: 2, height: 30, pad_all: 0, bg_color: 0xFF3B30, border_width: 0, scrollable: false}
+        - obj: {x: 225, y: 120, width: 30, height: 30, pad_all: 0, bg_opa: TRANSP, border_color: 0xFF3B30, border_width: 2, radius: 15, scrollable: false}
+        # Status in der Lücke zwischen Videobild (endet bei y=255) und Tasten (ab y=274).
+        - label: {id: lbl_camera_status, x: 100, y: 256, width: 280, text: "VERBINDE STREAM...", text_align: CENTER, text_color: 0xFFFFFF, text_font: font_14}
+        - button: {x: 4, y: 274, width: 154, height: 42, bg_color: 0x245A73, border_width: 0, on_click: [{script.execute: toggle_floodlight}], widgets: [{label: {id: lbl_live_light, align: CENTER, text: "FLUTLICHT --", text_color: 0xFFFFFF, text_font: font_14}}]}
+        - button: {x: 163, y: 274, width: 154, height: 42, bg_color: 0x8E3737, border_width: 0, on_click: [{online_video.stop: greywater_video}, {lvgl.label.update: {id: lbl_camera_status, text: "STREAM GESTOPPT"}}], widgets: [{label: {align: CENTER, text: "STREAM AUS", text_color: 0xFFFFFF, text_font: font_14}}]}
+        - button: {x: 322, y: 274, width: 154, height: 42, bg_color: 0x192630, border_width: 0, on_click: [{lvgl.page.show: greywater_page}], widgets: [{label: {align: CENTER, text: "ZURÜCK", text_color: 0xFFFFFF, text_font: font_14}}]}

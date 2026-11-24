@@ -1,0 +1,65 @@
+# =====================================================================
+#  Gerätedatei für das ESPHome Camper Cockpit
+#  Kopiere diese Datei in deinen ESPHome-Ordner und passe die Werte an.
+#  Alles Sensible kommt aus deiner secrets.yaml.
+# =====================================================================
+
+substitutions:
+  # ---- Gerät ----
+  device_name: camper-cockpit          # Hostname, nur a-z, 0-9 und Bindestrich
+  friendly_name: Camper Cockpit        # Name in Home Assistant
+  display_title: "CAMPER COCKPIT"      # Überschrift auf der Energie-Seite
+
+  # ---- Home Assistant ----
+  ha_url: "http://192.168.1.10:8123"   # Adresse deines HA, ohne / am Ende
+  ha_bearer_token: !secret cockpit_ha_bearer_token   # "Bearer " + langlebiges Zugriffstoken
+
+  # ---- Secrets ----
+  api_encryption_key: !secret cockpit_api_encryption_key
+  wifi_ssid: !secret wifi_ssid
+  wifi_password: !secret wifi_password
+  fallback_password: !secret cockpit_fallback_password
+
+  # ---- Entitäten: Energie ----
+  entity_battery_soc: sensor.batterie_ladezustand
+  entity_booster: switch.ladebooster
+  entity_dcdc_in_current: sensor.dcdc_eingangsstrom
+  entity_dcdc_in_power: sensor.dcdc_eingangsleistung
+  entity_dcdc_out_current: sensor.dcdc_ausgangsstrom
+  entity_dcdc_out_power: sensor.dcdc_ausgangsleistung
+  entity_dcdc_state_bulk: binary_sensor.dcdc_bulk
+  entity_dcdc_state_absorption: binary_sensor.dcdc_absorption
+  entity_dcdc_state_float: binary_sensor.dcdc_float
+  entity_dcdc_state_fault: binary_sensor.dcdc_fehler
+  entity_dcdc_state_off: binary_sensor.dcdc_aus
+  entity_production_current: sensor.stromproduktion_strom_gesamt
+  entity_production_power: sensor.stromproduktion_leistung_gesamt
+  entity_outside_temp: sensor.aussentemperatur
+
+  # ---- Entitäten: Kamera ----
+  entity_camera: camera.grauwassertank
+  entity_camera_power: switch.kamera
+  entity_camera_rssi: sensor.kamera_wlan_signal
+  entity_floodlight: switch.flutlicht
+
+  # ---- Entitäten: Wasserwaage ----
+  entity_level_pitch: sensor.wasserwaage_laengsneigung
+  entity_level_roll: sensor.wasserwaage_querneigung
+  entity_level_battery: sensor.wasserwaage_batterie
+  entity_level_voltage: sensor.wasserwaage_batteriespannung
+  entity_level_live: switch.wasserwaage_live_modus
+
+  # ---- Fahrzeug (Keilplan) ----
+  track_cm: "180"        # Spurbreite
+  wheelbase_cm: "404"    # Radstand
+  wedge_step_cm: "0.5"   # Rundung der Keilhöhen
+
+  # Optional: timezone, level_green_deg, level_yellow_deg, level_max_deg
+  # (Defaults siehe cockpit-display.yaml)
+
+packages:
+  cockpit:
+    url: https://github.com/DEIN-GITHUB-NAME/esphome-camper-cockpit
+    ref: v1.0.0          # feste Version; für Updates bewusst erhöhen
+    files: [cockpit-display.yaml]
+    refresh: 1d
