@@ -66,6 +66,6 @@ substitutions:
 packages:
   cockpit:
     url: https://github.com/joeetti/esphome-camper-cockpit
-    ref: v1.0.0          # feste Version; für Updates bewusst erhöhen
+    ref: main            # immer der aktuelle Stand; bei Problemen ein Release eintragen, z. B. v1.0.0
     files: [cockpit-display.yaml]
-    refresh: 1d
+    refresh: 1d          # einmal am Tag nach Updates schauen

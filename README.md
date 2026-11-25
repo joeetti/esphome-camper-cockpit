@@ -57,7 +57,11 @@ Optional in der Gerätedatei unter `substitutions`:
 
 ## Updates
 
-Die Gerätedatei zeigt mit `ref: v1.0.0` auf eine feste Version. Für ein Update die Versionsnummer auf das neue Release setzen (siehe [CHANGELOG](CHANGELOG.md)) und neu installieren. So ändert sich nichts an deinem Display, ohne dass du es willst.
+Die Gerätedatei zeigt mit `ref: main` immer auf den aktuellen Stand. ESPHome schaut einmal am Tag nach Neuerungen, und beim nächsten **Install** ist der neue Stand auf dem Display. Was sich geändert hat, steht im [CHANGELOG](CHANGELOG.md) und unter [Releases](https://github.com/joeetti/esphome-camper-cockpit/releases).
+
+**Probleme nach einem Update?** Trage statt `main` das letzte funktionierende Release ein, z. B. `ref: v1.0.0`, und installiere neu. So bleibt dein Display auf diesem Stand, bis du wieder `main` einträgst.
+
+Über **Watch → Custom → Releases** auf GitHub gibt es eine Benachrichtigung bei jedem neuen Release.
 
 ## Fehlersuche
 
