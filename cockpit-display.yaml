@@ -34,7 +34,7 @@ esphome:
   name: ${device_name}
   friendly_name: ${friendly_name}
   project:
-    name: "DEIN-GITHUB-NAME.esphome-camper-cockpit"
+    name: "joeetti.esphome-camper-cockpit"
     version: "1.0.0"
   on_boot:
     priority: -100
