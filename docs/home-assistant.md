@@ -1,5 +1,7 @@
 # Home Assistant einrichten
 
+[English](home-assistant.en.md) | **Deutsch**
+
 ## Zugriffstoken
 
 1. In Home Assistant unten links auf deinen Benutzernamen klicken → Reiter **Sicherheit**.

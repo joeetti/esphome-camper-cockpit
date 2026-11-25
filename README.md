@@ -1,5 +1,7 @@
 # ESPHome Camper Cockpit
 
+[English](README.en.md) | **Deutsch**
+
 Ein Touch-Display fürs Cockpit von Wohnmobil oder Camper: Energie, Grauwassertank-Kamera und eine Wasserwaage mit Keilplan auf einen Blick. Das Display läuft mit [ESPHome](https://esphome.io) und holt seine Daten aus Home Assistant.
 
 ![Übersicht](docs/images/uebersicht.png)
@@ -27,7 +29,7 @@ Pins und Display-Treiber sind auf genau dieses Board abgestimmt. Andere Boards b
 - ESPHome **2026.9.0 oder neuer** (getestet mit 2026.9.1)
 - Ein langlebiges Zugriffstoken eines **Administrators** in Home Assistant
 
-Welche Entitäten welche Art haben müssen, steht in [docs/home-assistant.md](docs/home-assistant.md).
+Welche Entitäten welche Art haben müssen, steht in [docs/home-assistant.md](docs/home-assistant.md) ([English](docs/home-assistant.en.md)).
 
 ## Installation
 
