@@ -54,7 +54,20 @@ Die fünf Zustands-Binärsensoren entsprechen dem, was die Victron-Integration f
 | `entity_level_roll` | Sensor, Grad | Querneigung, **positiv = rechts hoch** (in Fahrtrichtung) |
 | `entity_level_battery` | Sensor, % | Batterie des Neigungssensors |
 | `entity_level_voltage` | Sensor, V | Batteriespannung des Neigungssensors |
-| `entity_level_live` | Schalter* | Live-Modus, wird beim Öffnen der Seite ein- und beim Verlassen ausgeschaltet |
+| `entity_level_live` | Schalter*, optional | Live-Modus, siehe unten |
+
+### Live-Schalter (optional)
+
+Manche Neigungssensoren senden zum Batteriesparen nur selten und haben einen Schalter für einen schnellen Live-Modus. Für solche Sensoren gibt es in der Gerätedatei:
+
+```yaml
+level_live_switch: "true"
+entity_level_live: switch.wasserwaage_live_modus
+```
+
+Das Display schaltet den Live-Modus dann beim Öffnen der Wasserwaage ein und beim Verlassen wieder aus und zeigt oben „LIVE EIN“ oder „LIVE AUS“. Sendet dein Sensor ohnehin laufend, lass beide Zeilen weg: Dann wird nichts geschaltet und die Anzeige bleibt leer.
+
+### Vorzeichen
 
 Zeigt dein Sensor die Vorzeichen andersherum, stimmen Libelle und Keilplan nicht. Dann am besten in HA einen Template-Sensor mit umgedrehtem Vorzeichen anlegen und diesen eintragen.
 

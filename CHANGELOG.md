@@ -6,6 +6,7 @@
 - Konfiguration als ESPHome-Paket: alle Entitäten und Zugangsdaten in der eigenen Gerätedatei
 - Wasserwaage per Push über die native API (kein Polling), Libelle mit einstellbaren Toleranzringen
 - Keilplan: Keilhöhe je Rad aus Spurbreite und Radstand
+- Optionaler Live-Schalter für Neigungssensoren, die zum Stromsparen nur auf Anforderung senden
 - Nicht verfügbare Werte werden als „--“ angezeigt
 - OTA-Updates verschlüsselt mit dem API-Schlüssel
 - Schaltbefehle domänenunabhängig (switch, light, input_boolean …)

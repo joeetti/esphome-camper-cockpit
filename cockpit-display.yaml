@@ -14,6 +14,11 @@ substitutions:
   # sowie alle entity_* Werte (siehe docs/home-assistant.md)
 
   # ---- Optionale Werte mit Defaults ----
+  # Wasserwaage mit Live-Schalter: "true", wenn der Neigungssensor zum Stromsparen
+  # nur auf Anforderung sendet. Der Schalter wird beim Öffnen der Seite ein- und
+  # beim Verlassen ausgeschaltet. Bei "false" wird entity_level_live nicht gebraucht.
+  level_live_switch: "false"
+  entity_level_live: "switch.cockpit_kein_live_schalter"
   display_title: "CAMPER COCKPIT"
   timezone: "Europe/Berlin"
   # Wasserwaage: Toleranzen in Grad. Die drei Ringe der Libelle stehen genau auf diesen Werten.
@@ -23,13 +28,13 @@ substitutions:
   # Keilplan: Fahrzeugmaße in cm und Rundung der Keilhöhen.
   track_cm: "180"
   wheelbase_cm: "404"
-  wedge_step_cm: "1"
+  wedge_step_cm: "0.5"
 
 esphome:
   name: ${device_name}
   friendly_name: ${friendly_name}
   project:
-    name: "joeetti.esphome-camper-cockpit"
+    name: "DEIN-GITHUB-NAME.esphome-camper-cockpit"
     version: "1.0.0"
   on_boot:
     priority: -100
@@ -196,7 +201,8 @@ binary_sensor:
     device_class: connectivity
     entity_category: diagnostic
 
-  # Wasserwaage: Live-Schalter kommt per Push von Home Assistant (kein Polling).
+  # Wasserwaage: Zustand des Live-Schalters per Push von Home Assistant (kein Polling).
+  # Ohne Live-Schalter zeigt die Entität ins Leere und liefert einfach nie einen Wert.
   - platform: homeassistant
     id: level_live_ha
     entity_id: ${entity_level_live}
@@ -431,20 +437,30 @@ script:
   - id: set_level_live_on
     mode: restart
     then:
-      - http_request.post:
-          url: "${ha_url}/api/services/homeassistant/turn_on"
-          request_headers: {Authorization: "${ha_bearer_token}", Content-Type: application/json}
-          body: '{"entity_id":"${entity_level_live}"}'
+      # Ohne Live-Schalter (level_live_switch: "false") passiert hier nichts.
+      - if:
+          condition:
+            lambda: 'return ${level_live_switch};'
+          then:
+            - http_request.post:
+                url: "${ha_url}/api/services/homeassistant/turn_on"
+                request_headers: {Authorization: "${ha_bearer_token}", Content-Type: application/json}
+                body: '{"entity_id":"${entity_level_live}"}'
       - lambda: 'id(level_live_on) = true;'
       - script.execute: update_level_ui
 
   - id: set_level_live_off
     mode: restart
     then:
-      - http_request.post:
-          url: "${ha_url}/api/services/homeassistant/turn_off"
-          request_headers: {Authorization: "${ha_bearer_token}", Content-Type: application/json}
-          body: '{"entity_id":"${entity_level_live}"}'
+      # Ohne Live-Schalter (level_live_switch: "false") passiert hier nichts.
+      - if:
+          condition:
+            lambda: 'return ${level_live_switch};'
+          then:
+            - http_request.post:
+                url: "${ha_url}/api/services/homeassistant/turn_off"
+                request_headers: {Authorization: "${ha_bearer_token}", Content-Type: application/json}
+                body: '{"entity_id":"${entity_level_live}"}'
       - lambda: 'id(level_live_on) = false;'
       - script.execute: update_level_ui
 
@@ -473,8 +489,13 @@ script:
             lv_label_set_text(id(lbl_level_live), "API GETRENNT");
             lv_obj_set_style_text_color(id(lbl_level_live), lv_color_hex(0xFF5C5C), LV_PART_MAIN);
           } else {
-            lv_label_set_text(id(lbl_level_live), id(level_live_on) ? "LIVE EIN" : "LIVE AUS");
-            lv_obj_set_style_text_color(id(lbl_level_live), lv_color_hex(id(level_live_on) ? 0x63D471 : 0xAAB8C2), LV_PART_MAIN);
+            if (${level_live_switch}) {
+              lv_label_set_text(id(lbl_level_live), id(level_live_on) ? "LIVE EIN" : "LIVE AUS");
+              lv_obj_set_style_text_color(id(lbl_level_live), lv_color_hex(id(level_live_on) ? 0x63D471 : 0xAAB8C2), LV_PART_MAIN);
+            } else {
+              // Ohne Live-Schalter gibt es keinen Modus anzuzeigen.
+              lv_label_set_text(id(lbl_level_live), "");
+            }
           }
 
           char b[48], sb[16], sv[16];
@@ -667,7 +688,7 @@ lvgl:
         - script.execute: set_level_live_off
       widgets:
         - label: {x: 12, y: 11, text: "WASSERWAAGE", text_color: 0x53BDEC, text_font: font_14}
-        - label: {id: lbl_level_live, x: 205, y: 11, width: 100, text: "LIVE AUS", text_align: CENTER, text_color: 0x63D471, text_font: font_14}
+        - label: {id: lbl_level_live, x: 205, y: 11, width: 100, text: "", text_align: CENTER, text_color: 0x63D471, text_font: font_14}
         - label: {id: lbl_level_battery, x: 310, y: 11, width: 162, text: "BAT -- % | -- V", text_align: RIGHT, text_color: 0xAAB8C2, text_font: font_14}
         - label: {x: 214, y: 42, width: 125, text: "LÄNGS", text_align: CENTER, text_color: 0xAAB8C2, text_font: font_14}
         - label: {id: lbl_pitch, x: 214, y: 62, width: 125, text: "-- °", text_align: CENTER, text_color: 0xFFFFFF, text_font: font_18}

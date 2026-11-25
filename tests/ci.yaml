@@ -31,6 +31,7 @@ substitutions:
   entity_level_roll: sensor.ci
   entity_level_battery: sensor.ci
   entity_level_voltage: sensor.ci
+  level_live_switch: "true"
   entity_level_live: switch.ci
 
 packages:

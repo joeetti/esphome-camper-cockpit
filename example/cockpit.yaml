@@ -47,19 +47,24 @@ substitutions:
   entity_level_roll: sensor.wasserwaage_querneigung
   entity_level_battery: sensor.wasserwaage_batterie
   entity_level_voltage: sensor.wasserwaage_batteriespannung
-  entity_level_live: switch.wasserwaage_live_modus
+
+  # Nur nötig, wenn dein Neigungssensor zum Stromsparen nur auf Anforderung sendet:
+  # Dann wird dieser Schalter beim Öffnen der Wasserwaage ein- und beim Verlassen
+  # ausgeschaltet. Sonst beide Zeilen weglassen.
+  # level_live_switch: "true"
+  # entity_level_live: switch.wasserwaage_live_modus
 
   # ---- Fahrzeug (Keilplan) ----
   track_cm: "180"        # Spurbreite
   wheelbase_cm: "404"    # Radstand
-  wedge_step_cm: "1"   # Rundung der Keilhöhen
+  wedge_step_cm: "0.5"   # Rundung der Keilhöhen
 
   # Optional: timezone, level_green_deg, level_yellow_deg, level_max_deg
   # (Defaults siehe cockpit-display.yaml)
 
 packages:
   cockpit:
-    url: https://github.com/joeetti/esphome-camper-cockpit
+    url: https://github.com/DEIN-GITHUB-NAME/esphome-camper-cockpit
     ref: v1.0.0          # feste Version; für Updates bewusst erhöhen
     files: [cockpit-display.yaml]
     refresh: 1d

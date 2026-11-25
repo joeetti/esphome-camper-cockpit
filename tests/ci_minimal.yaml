@@ -1,0 +1,37 @@
+# Wie ci.yaml, aber ohne optionale Werte (z. B. ohne Live-Schalter der Wasserwaage).
+# Nur für die automatische Prüfung auf GitHub: bindet das Paket lokal ein
+# und setzt Dummy-Werte. Nicht als Vorlage verwenden, dafür gibt es example/.
+substitutions:
+  device_name: ci-minimal
+  friendly_name: CI Test
+  ha_url: "http://192.0.2.1:8123"
+  ha_bearer_token: "Bearer dummy-token"
+  api_encryption_key: "pKq/7K0D1n8oUxT0Y4kz0w5E2kPq9bq5Vb8jvJm0f3o="
+  wifi_ssid: "ci"
+  wifi_password: "ci-password"
+  fallback_password: "ci-password"
+  entity_battery_soc: sensor.ci
+  entity_booster: switch.ci
+  entity_dcdc_in_current: sensor.ci
+  entity_dcdc_in_power: sensor.ci
+  entity_dcdc_out_current: sensor.ci
+  entity_dcdc_out_power: sensor.ci
+  entity_dcdc_state_bulk: binary_sensor.ci
+  entity_dcdc_state_absorption: binary_sensor.ci
+  entity_dcdc_state_float: binary_sensor.ci
+  entity_dcdc_state_fault: binary_sensor.ci
+  entity_dcdc_state_off: binary_sensor.ci
+  entity_production_current: sensor.ci
+  entity_production_power: sensor.ci
+  entity_outside_temp: sensor.ci
+  entity_camera: camera.ci
+  entity_camera_power: switch.ci
+  entity_camera_rssi: sensor.ci
+  entity_floodlight: switch.ci
+  entity_level_pitch: sensor.ci
+  entity_level_roll: sensor.ci
+  entity_level_battery: sensor.ci
+  entity_level_voltage: sensor.ci
+
+packages:
+  cockpit: !include ../cockpit-display.yaml
