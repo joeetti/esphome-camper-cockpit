@@ -24,6 +24,7 @@ substitutions:
   entity_production_current: sensor.ci
   entity_production_power: sensor.ci
   entity_outside_temp: sensor.ci
+  entity_inside_temp: sensor.ci
   entity_camera: camera.ci
   entity_camera_power: switch.ci
   entity_camera_rssi: sensor.ci

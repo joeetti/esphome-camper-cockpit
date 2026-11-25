@@ -8,7 +8,7 @@ Ein Touch-Display fürs Cockpit von Wohnmobil oder Camper: Energie, Grauwasserta
 
 ## Funktionen
 
-- **Energie:** Batterie-Ladezustand, Ladebooster schalten, DC-DC-Wandler (Zustand, Ein-/Ausgang), Gesamtproduktion, Außentemperatur
+- **Energie:** Batterie-Ladezustand, Ladebooster schalten, DC-DC-Wandler (Zustand, Ein-/Ausgang), Gesamtproduktion, Außen- und Innentemperatur
 - **Grauwasser:** Kamera und Flutlicht schalten, Livebild per Fingertipp
 - **Wasserwaage:** Libelle mit einstellbaren Toleranzringen, Längs- und Querneigung, Keilplan mit Keilhöhe je Rad
 - **Kamera:** MJPEG-Livebild mit Zielkreuz, direkt aus Home Assistant

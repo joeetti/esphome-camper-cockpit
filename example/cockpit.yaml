@@ -35,6 +35,7 @@ substitutions:
   entity_production_current: sensor.stromproduktion_strom_gesamt
   entity_production_power: sensor.stromproduktion_leistung_gesamt
   entity_outside_temp: sensor.aussentemperatur
+  entity_inside_temp: sensor.innentemperatur
 
   # ---- Entitäten: Kamera ----
   entity_camera: camera.grauwassertank

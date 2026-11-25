@@ -34,6 +34,7 @@ Alle Einträge gehören in die Gerätedatei unter `substitutions`. Die Entitäts
 | `entity_production_current` | Sensor | Gesamtproduktion Strom |
 | `entity_production_power` | Sensor | Gesamtproduktion Leistung |
 | `entity_outside_temp` | Sensor | Außentemperatur |
+| `entity_inside_temp` | Sensor | Innentemperatur |
 
 Die fünf Zustands-Binärsensoren entsprechen dem, was die Victron-Integration für Orion-DC-DC-Wandler liefert. Ein Wert ist „on“, die anderen „off“.
 

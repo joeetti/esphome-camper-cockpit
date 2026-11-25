@@ -2,7 +2,7 @@
 
 ## v1.0.0 – erste öffentliche Version
 
-- Vier Seiten: Energie, Grauwasser, Wasserwaage mit Keilplan, Kamera-Livebild
+- Vier Seiten: Energie (mit Außen- und Innentemperatur), Grauwasser, Wasserwaage mit Keilplan, Kamera-Livebild
 - Konfiguration als ESPHome-Paket: alle Entitäten und Zugangsdaten in der eigenen Gerätedatei
 - Wasserwaage per Push über die native API (kein Polling), Libelle mit einstellbaren Toleranzringen
 - Keilplan: Keilhöhe je Rad aus Spurbreite und Radstand

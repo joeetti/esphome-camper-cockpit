@@ -259,7 +259,7 @@ script:
                 capture_response: true
                 max_response_buffer_size: 8192
                 body: >-
-                  {"template":"{{ {'booster':states('${entity_booster}'),'battery':states('${entity_battery_soc}'),'battery_unit':state_attr('${entity_battery_soc}','unit_of_measurement') or '','in_a':states('${entity_dcdc_in_current}'),'in_w':states('${entity_dcdc_in_power}'),'out_a':states('${entity_dcdc_out_current}'),'out_w':states('${entity_dcdc_out_power}'),'mode_absorption':states('${entity_dcdc_state_absorption}'),'mode_bulk':states('${entity_dcdc_state_bulk}'),'mode_fault':states('${entity_dcdc_state_fault}'),'mode_float':states('${entity_dcdc_state_float}'),'mode_off':states('${entity_dcdc_state_off}'),'prod_a':states('${entity_production_current}'),'prod_a_unit':state_attr('${entity_production_current}','unit_of_measurement') or '','prod':states('${entity_production_power}'),'prod_unit':state_attr('${entity_production_power}','unit_of_measurement') or '','floodlight':states('${entity_floodlight}'),'esp_cam':states('${entity_camera_power}'),'rssi':states('${entity_camera_rssi}'),'outside_temp':states('${entity_outside_temp}'),'outside_temp_unit':state_attr('${entity_outside_temp}','unit_of_measurement') or ''} | tojson }}"}
+                  {"template":"{{ {'booster':states('${entity_booster}'),'battery':states('${entity_battery_soc}'),'battery_unit':state_attr('${entity_battery_soc}','unit_of_measurement') or '','in_a':states('${entity_dcdc_in_current}'),'in_w':states('${entity_dcdc_in_power}'),'out_a':states('${entity_dcdc_out_current}'),'out_w':states('${entity_dcdc_out_power}'),'mode_absorption':states('${entity_dcdc_state_absorption}'),'mode_bulk':states('${entity_dcdc_state_bulk}'),'mode_fault':states('${entity_dcdc_state_fault}'),'mode_float':states('${entity_dcdc_state_float}'),'mode_off':states('${entity_dcdc_state_off}'),'prod_a':states('${entity_production_current}'),'prod_a_unit':state_attr('${entity_production_current}','unit_of_measurement') or '','prod':states('${entity_production_power}'),'prod_unit':state_attr('${entity_production_power}','unit_of_measurement') or '','floodlight':states('${entity_floodlight}'),'esp_cam':states('${entity_camera_power}'),'rssi':states('${entity_camera_rssi}'),'outside_temp':states('${entity_outside_temp}'),'outside_temp_unit':state_attr('${entity_outside_temp}','unit_of_measurement') or '','inside_temp':states('${entity_inside_temp}'),'inside_temp_unit':state_attr('${entity_inside_temp}','unit_of_measurement') or ''} | tojson }}"}
                 on_response:
                   then:
                     - lambda: |-
@@ -363,6 +363,10 @@ script:
                           if (std::isnan(temp)) snprintf(b, sizeof(b), "--");
                           else snprintf(b, sizeof(b), "%.1f %s", temp, txt(r["outside_temp_unit"]).c_str());
                           lv_label_set_text(id(lbl_outside_temp), b);
+                          float temp_in = num(r["inside_temp"]);
+                          if (std::isnan(temp_in)) snprintf(b, sizeof(b), "--");
+                          else snprintf(b, sizeof(b), "%.1f %s", temp_in, txt(r["inside_temp_unit"]).c_str());
+                          lv_label_set_text(id(lbl_inside_temp), b);
                           fmt(v1, sizeof(v1), "%.1f", num(r["prod_a"]));
                           fmt(v2, sizeof(v2), "%.1f", num(r["prod"]));
                           snprintf(b, sizeof(b), "STROMPRODUKTION GESAMT %s %s | %s %s",
@@ -656,8 +660,10 @@ lvgl:
             scrollable: false
             widgets:
               - label: {x: 0, y: 12, width: 123, text: "AUSSEN", text_align: CENTER, text_color: 0xAAB8C2, text_font: font_14}
-              - label: {id: lbl_outside_temp, x: 4, y: 70, width: 115, text: "--", text_align: CENTER, text_color: 0xFFFFFF, text_font: font_24, long_mode: DOT}
-              - label: {x: 0, y: 112, width: 123, text: "TEMPERATUR", text_align: CENTER, text_color: 0xAAB8C2, text_font: font_14}
+              - label: {id: lbl_outside_temp, x: 4, y: 34, width: 115, text: "--", text_align: CENTER, text_color: 0xFFFFFF, text_font: font_24, long_mode: DOT}
+              - obj: {x: 14, y: 81, width: 95, height: 1, pad_all: 0, bg_color: 0x2A3944, border_width: 0, radius: 0, scrollable: false}
+              - label: {x: 0, y: 100, width: 123, text: "INNEN", text_align: CENTER, text_color: 0xAAB8C2, text_font: font_14}
+              - label: {id: lbl_inside_temp, x: 4, y: 122, width: 115, text: "--", text_align: CENTER, text_color: 0xFFFFFF, text_font: font_24, long_mode: DOT}
         - obj: {x: 8, y: 228, width: 464, height: 43, pad_all: 0, bg_color: 0x192630, border_width: 0, radius: 9, scrollable: false, widgets: [{label: {id: lbl_production, align: CENTER, text: "STROMPRODUKTION --", text_align: CENTER, text_color: 0xFFFFFF, text_font: font_18}}]}
         - button: {x: 8, y: 280, width: 148, height: 34, bg_color: 0x245A73, border_width: 0, radius: 8, on_click: [{lvgl.page.show: energy_page}], widgets: [{label: {align: CENTER, text: "ENERGIE", text_color: 0xFFFFFF, text_font: font_14}}]}
         - button: {x: 166, y: 280, width: 148, height: 34, bg_color: 0x192630, border_width: 0, radius: 8, on_click: [{lvgl.page.show: greywater_page}], widgets: [{label: {align: CENTER, text: "GRAUWASSER", text_color: 0xFFFFFF, text_font: font_14}}]}
